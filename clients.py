@@ -2,7 +2,7 @@ import sys, socket, struct, random
 
 class Client():
 
-	commands = ["READ FILE", "WRITE FILE"]
+	commands = ["READ FILE", "WRITE FILE", "PWDIR", "CHDIR"]
 
 	def __init__(self, port):
 
@@ -29,11 +29,11 @@ class Client():
 				if any(x in self.message for x in self.commands):
 					valid = True
 				else:
-					print "Invalid Command"
+					print "Invalid Command\n"
 			s.sendall(self.message)
 			try:
 				recv_data = s.recv(4096)
-				print recv_data
+				print recv_data + '\n'
 				valid = False;
 			except socket.timeout:
 				print "Something went wrong\n"
