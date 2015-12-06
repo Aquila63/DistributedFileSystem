@@ -3,6 +3,19 @@ import Queue
 
 DFS_ROOT_DIR = "~/DFS-FILES/"
 
+#To implement locking, add the file path to the list when it is
+#opened. Before a file is opened, the client will check if the file is locked
+#If the file is locked, infom the client. If not, acquire the lock by adding
+#the file name to the list. The lock is released when the file is closed
+#i.e when it's removed fron the list
+locked_files = []
+
+#To implement caching, a certain number of files are added to the dict
+#after they are read. It will be of the form filename : data
+#Instead of navigating to and opening the file, the server will
+#check the cache first
+cache = {}
+
 class ThreadPoolMixIn(SocketServer.ThreadingMixIn):
 
     pool_size = 10 #No. of threads in the pool
@@ -43,10 +56,12 @@ class ThreadPoolMixIn(SocketServer.ThreadingMixIn):
     def find_file(self, path):
         return os.path.exists(path)
 
+    #def close_file(file)
 
     def read_file(self, path):
         #print path
-        if not os.path.isfile(path):
+        #if not os.path.isfile(path):
+        if '/' in path:
             full_dir = os.path.expanduser(path)
 
             if not self.find_file(full_dir):
@@ -60,32 +75,72 @@ class ThreadPoolMixIn(SocketServer.ThreadingMixIn):
                 #The other one should've caught this
                 return "No such file or directory"
         else:
+            #File is in the current directory
             file = path
-
-        fo = open(file, "r")
+        try:
+            fo = open(file, "r")
+        except IOError:
+            return "No such file or directory"
         data = fo.read()
         fo.close()
         return data
+
+    def write_file(self, data_in):
+        #Seperate out the two components
+        path = data_in[0]
+        data =  data_in[1]
+        #if not os.path.isfile(path):
+        if '/' in path:
+            #User entered path in the form ~/DFS-FILES/path
+            if "~/DFS-FILES" in path:
+                full_dir = os.path.expanduser(path)
+            else:
+                #User implied the wordking dir; append it to the path
+                full_dir = os.getcwd() + '/' + path
+
+            path1, file = os.path.split(full_dir)
+            try:
+                os.chdir(path1)
+            except OSError:
+                #If the dir does not exist - make it
+                os.mkdir(path1)
+                os.chdir(path1)
+        else:
+            file = path
+
+        fo = open(file, "w")
+        fo.write(data)
+        fo.close()
+        response = "File {0} has been written\n".format(path)
+        return response
 
     #This is where the work is done
     def finish_request(self, request, client_address):
         while 1:
             #Recieve data from client
-            data = request.recv(1024)
+            data = request.recv(8192)
             root_dir = os.path.expanduser(DFS_ROOT_DIR)
             os.chdir(root_dir)
 
-            #N/B: Requests will of the form <COMMAND> <DIR>
+            #N/B: Requests will of the form <COMMAND> <DIR> <DATA>
             #e.g. READ_FILE ~/DFS-FILES/loremipsum.txt
             #<COMMANDS> :  READ_FILE
             #              WRITE_FILE
             #              CH_DIR
 
-            if data.startswith("READ_FILE"):
-                r = re.compile("READ_FILE (.*?)$")
+            if data.startswith("READ FILE"):
+                r = re.compile("READ FILE (.*?)$")
                 res = r.search(data)
                 path = res.group(1)
                 response = self.read_file(path);
+                request.sendto(response, client_address);
+
+            if data.startswith("WRITE FILE"):
+                r = re.compile("WRITE FILE (.*?)$")
+                res = r.search(data)
+                s = res.group(1)
+                data = s.split(" ", 1)
+                response = self.write_file(data)
                 request.sendto(response, client_address);
 
     def shutdown(self):

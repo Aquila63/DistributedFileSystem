@@ -2,6 +2,8 @@ import sys, socket, struct, random
 
 class Client():
 
+	commands = ["READ FILE", "WRITE FILE"]
+
 	def __init__(self, port):
 
 		s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -24,7 +26,7 @@ class Client():
 
 			while not valid:
 				self.message = raw_input(">: ")
-				if "READ_FILE" in self.message:
+				if any(x in self.message for x in self.commands):
 					valid = True
 				else:
 					print "Invalid Command"
