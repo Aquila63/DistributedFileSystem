@@ -40,21 +40,25 @@ class ThreadPoolMixIn(SocketServer.ThreadingMixIn):
             self.finish_request(request, client_address)
 
 
-    def find_file(self, dir):
-        return os.path.exists(dir)
+    def find_file(self, path):
+        return os.path.exists(path)
 
 
     def read_file(self, path):
-        print path
+        #print path
         if not os.path.isfile(path):
             full_dir = os.path.expanduser(path)
 
-            if self.find_file(full_dir) == -1:
-                return("The system cannot find the file specified")
+            if not self.find_file(full_dir):
+                return "No such file or directory"
 
             #File is found, change the directory
             path1, file = os.path.split(full_dir)
-            os.chdir(path1)
+            try:
+                os.chdir(path1)
+            except OSError:
+                #The other one should've caught this
+                return "No such file or directory"
         else:
             file = path
 
@@ -65,23 +69,24 @@ class ThreadPoolMixIn(SocketServer.ThreadingMixIn):
 
     #This is where the work is done
     def finish_request(self, request, client_address):
-        #Recieve data from client
-        data = request.recv(1024)
-        root_dir = os.path.expanduser(DFS_ROOT_DIR)
-        os.chdir(root_dir)
+        while 1:
+            #Recieve data from client
+            data = request.recv(1024)
+            root_dir = os.path.expanduser(DFS_ROOT_DIR)
+            os.chdir(root_dir)
 
-        #N/B: Requests will of the form <COMMAND> <DIR>
-        #e.g. READ_FILE ~/DFS-FILES/loremipsum.txt
-        #<COMMANDS> :  READ_FILE
-        #              WRITE_FILE
-        #              CH_DIR
+            #N/B: Requests will of the form <COMMAND> <DIR>
+            #e.g. READ_FILE ~/DFS-FILES/loremipsum.txt
+            #<COMMANDS> :  READ_FILE
+            #              WRITE_FILE
+            #              CH_DIR
 
-        if data.startswith("READ_FILE"):
-            r = re.compile("READ_FILE (.*?)$")
-            res = r.search(data)
-            path = res.group(1)
-            response = self.read_file(path);
-            request.sendto(response, client_address);
+            if data.startswith("READ_FILE"):
+                r = re.compile("READ_FILE (.*?)$")
+                res = r.search(data)
+                path = res.group(1)
+                response = self.read_file(path);
+                request.sendto(response, client_address);
 
     def shutdown(self):
         server.server_close()
