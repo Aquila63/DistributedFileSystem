@@ -2,21 +2,9 @@ import sys, SocketServer, threading, os, re
 import Queue
 
 from cache import Cache
+from locker import Locker
 
 DFS_ROOT_DIR = "~/DFS-FILES/"
-
-#N/B: Locks and Caching will probably be implemeted in their own classes,
-#so that both the locks and caches can be seen by multiple servers
-
-"""
-To implement locking, add the file path to the list when it is opened.
-Before a file is opened, the client will check if the file is locked.
-If the file is locked, inform the client. If not, acquire the lock by adding
-the file name to the list. The lock is released when the file is closed
-i.e when it's removed fron the list
-"""
-locked_files = []
-
 
 class ThreadPoolMixIn(SocketServer.ThreadingMixIn):
 
@@ -24,6 +12,7 @@ class ThreadPoolMixIn(SocketServer.ThreadingMixIn):
     student_id = "07988616e4e32911bc9f6a7571184b611fc93406d027a5c828a87664735ed383"
     current_dir = DFS_ROOT_DIR
     cache = Cache()
+    locker = Locker()
 
     """
     =========================================================
@@ -62,6 +51,7 @@ class ThreadPoolMixIn(SocketServer.ThreadingMixIn):
 
     """========================================================="""
 
+
     """
     =========================================================
                     DIRECTORY OPERATIONS
@@ -90,6 +80,9 @@ class ThreadPoolMixIn(SocketServer.ThreadingMixIn):
             dirlst += i + '\n'
 
         return dirlst
+
+    """========================================================="""
+
 
     """
     =========================================================
@@ -126,14 +119,22 @@ class ThreadPoolMixIn(SocketServer.ThreadingMixIn):
             else:
                 #File is in the current directory
                 file = path
-            try:
-                fo = open(file, "r")
-            except IOError:
-                return "No such file or directory"
-            data = fo.read()
-            fo.close()
-            self.cache.add(path, data)
-            return data
+
+            #Try to acquire the lock
+            if not self.locker.acquire_lock(file):
+                locked = "File is locked, no cached copy available"
+                return locked
+            else:
+                try:
+                    fo = open(file, "r")
+                except IOError:
+                    return "No such file or directory - opem"
+                data = fo.read()
+                fo.close()
+                #Release the lock
+                self.locker.release_lock(file)
+                self.cache.add(path, data)
+                return data
 
     def write_file(self, data_in):
         #Seperate out the two components
@@ -157,12 +158,18 @@ class ThreadPoolMixIn(SocketServer.ThreadingMixIn):
                 os.chdir(path1)
         else:
             file = path
-
-        fo = open(file, "w")
-        fo.write(data)
-        fo.close()
-        response = "File {0} has been written\n".format(path)
-        return response
+        #Try to acquire the lock
+        if not self.locker.acquire_lock(file):
+            locked = "File is locked, no cached copy available"
+            return locked
+        else:
+            fo = open(file, "w")
+            fo.write(data)
+            fo.close()
+            #Release the lock
+            self.locker.release_lock(file)
+            response = "File {0} has been written\n".format(path)
+            return response
 
     """========================================================="""
 
@@ -228,12 +235,17 @@ class ThreadPoolMixIn(SocketServer.ThreadingMixIn):
                     response = self.list_dir(self.current_dir)
                     request.sendto(response, client_address)
 
+                
+                if data.startswith("QUIT"):
+                    print "Shutting down..."
+                    self.shutdown()
+
 
     """========================================================="""
 
     def shutdown(self):
         server.server_close()
-        #Force shutdown, this is the only method which works
+        #Force shutdown
         os._exit(os.EX_OK)
 
 

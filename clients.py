@@ -3,7 +3,7 @@ import sys, socket, struct, random
 class Client():
 
 	#List of valid commands
-	commands = ["READ FILE", "WRITE FILE", "PWDIR", "CHDIR", "LS"]
+	commands = ["READ FILE", "WRITE FILE", "PWDIR", "CHDIR", "LS", "QUIT"]
 
 	def __init__(self, port):
 
