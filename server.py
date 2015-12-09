@@ -62,11 +62,9 @@ class ThreadPoolMixIn(SocketServer.ThreadingMixIn):
 
     """========================================================="""
 
-
-
     """
     =========================================================
-                    FILE OPERATIONS
+                    DIRECTORY OPERATIONS
     =========================================================
     """
 
@@ -84,10 +82,25 @@ class ThreadPoolMixIn(SocketServer.ThreadingMixIn):
 
         return self.current_dir
 
+    def list_dir(self, path):
+        path = os.path.expanduser(path)
+        lst = os.listdir(path)
+        dirlst = ""
+        for i in lst:
+            dirlst += i + '\n'
+
+        return dirlst
+
+    """
+    =========================================================
+                    FILE OPERATIONS
+    =========================================================
+    """
+
+
     def find_file(self, path):
         return os.path.exists(path)
 
-    #def close_file(file)
 
     def read_file(self, path):
         #If the file is in the cache, retreive from there
@@ -139,6 +152,7 @@ class ThreadPoolMixIn(SocketServer.ThreadingMixIn):
                 os.chdir(path1)
             except OSError:
                 #If the dir does not exist - make it
+                print "Directory does not exist; creating..."
                 os.mkdir(path1)
                 os.chdir(path1)
         else:
@@ -174,10 +188,11 @@ class ThreadPoolMixIn(SocketServer.ThreadingMixIn):
                           WRITE FILE <DIR> <DATA>
                           CHDIR <DIR>
                           PWDIR <DIR>
+                          LS
             """
             if not data:
                 response = "The directory server didn't recieve anything"
-                request.sentto(response, client_address)
+                request.sendto(response, client_address)
             else:
                 if data.startswith("READ FILE"):
                     r = re.compile("READ FILE (.*?)$")
@@ -208,6 +223,11 @@ class ThreadPoolMixIn(SocketServer.ThreadingMixIn):
                     else:
                         #Have to send something, as the client expects a response
                         request.sendto(" ", client_address)
+
+                if data.startswith("LS"):
+                    response = self.list_dir(self.current_dir)
+                    request.sendto(response, client_address)
+
 
     """========================================================="""
 
