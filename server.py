@@ -174,12 +174,12 @@ class ThreadPoolMixIn(SocketServer.ThreadingMixIn):
                     #response = self.write_file(data)
                     request.sendto(response, client_address)
 
-                if data.startswith("PWDIR"):
+                if data.startswith("PWD"):
                     response = self.current_dir
                     request.sendto(response, client_address)
 
-                if data.startswith("CHDIR"):
-                    r = re.compile("CHDIR (.*?)$")
+                if data.startswith("CD"):
+                    r = re.compile("CD (.*?)$")
                     res = r.search(data)
                     path = res.group(1)
                     if self.change_dir(path) == -1:
