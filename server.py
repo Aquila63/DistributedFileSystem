@@ -1,10 +1,15 @@
-import sys, SocketServer, threading, os, re
+#!/bin/bash
+import sys, socket, SocketServer, threading, os, re
 import Queue
 
 from cache import Cache
 from locker import Locker
+from fileserver import FileServer
 
 DFS_ROOT_DIR = "~/DFS-FILES/"
+FILE_SERVER1_DIR = "~/DFS-FILES/"
+FILE_SERVER2_DIR = "~/DFS-FILES/test/"
+
 
 class ThreadPoolMixIn(SocketServer.ThreadingMixIn):
 
@@ -13,6 +18,29 @@ class ThreadPoolMixIn(SocketServer.ThreadingMixIn):
     current_dir = DFS_ROOT_DIR
     cache = Cache()
     locker = Locker()
+    servers = {}
+     
+    #fs1 = FileServer(("0.0.0.0", 2049), ThreadedRequestHandler)
+    #fs2 = FileServer(("0.0.0.0", 2050), ThreadedRequestHandler)
+    
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    #Connect to first file server and pass its directory
+    address = ("0.0.0.0", 2049)
+    s.connect(address)
+    s.send(FILE_SERVER1_DIR)
+    data = s.recv(512)
+    print data
+    servers[FILE_SERVER1_DIR] = s 
+    #Connect to second file server and pass its directory
+    address2 = ("0.0.0.0", 2050)
+    s2.connect(address2)
+    s2.send(FILE_SERVER2_DIR)
+    data = s2.recv(512)
+    print data
+    servers[FILE_SERVER2_DIR] = s2 
+    
+    socketToSend = s
 
     """
     =========================================================
@@ -51,7 +79,23 @@ class ThreadPoolMixIn(SocketServer.ThreadingMixIn):
 
     """========================================================="""
 
-
+    """
+    =========================================================
+                    SOCKET OPERATIONS
+    =========================================================
+    """
+    #Every time a directory is changed, check which socket we have to send from
+    def resolve_socket(self, path):
+          #path = os.path.expanduser(path)
+          while path not in self.servers:
+            #Go up one directory
+            path = os.path.dirname(os.path.normpath(path))
+          
+          self.socketToSend = self.servers[path]
+          
+    
+    """========================================================="""
+    
     """
     =========================================================
                     DIRECTORY OPERATIONS
@@ -69,7 +113,8 @@ class ThreadPoolMixIn(SocketServer.ThreadingMixIn):
                 self.current_dir += '/'
         else:
             return -1
-
+        
+        self.resolve_socket(self.current_dir)
         return self.current_dir
 
     def list_dir(self, path):
@@ -82,97 +127,6 @@ class ThreadPoolMixIn(SocketServer.ThreadingMixIn):
         return dirlst
 
     """========================================================="""
-
-
-    """
-    =========================================================
-                    FILE OPERATIONS
-    =========================================================
-    """
-
-
-    def find_file(self, path):
-        return os.path.exists(path)
-
-
-    def read_file(self, path):
-        #If the file is in the cache, retreive from there
-        if self.cache.search(path):
-            data = self.cache.retrieve(path)
-            print "{0} retrieved from cache".format(path)
-            return data
-        else:
-        #Retreive data the standard way
-            if '/' in path:
-                full_dir = os.path.expanduser(path)
-
-                if not self.find_file(full_dir):
-                    return "No such file or directory"
-
-                #File is found, change the directory
-                path1, file = os.path.split(full_dir)
-                try:
-                    os.chdir(path1)
-                except OSError:
-                    #The other one should've caught this
-                    return "No such file or directory"
-            else:
-                #File is in the current directory
-                file = path
-
-            #Try to acquire the lock
-            if not self.locker.acquire_lock(file):
-                locked = "File is locked, no cached copy available"
-                return locked
-            else:
-                try:
-                    fo = open(file, "r")
-                except IOError:
-                    return "No such file or directory - opem"
-                data = fo.read()
-                fo.close()
-                #Release the lock
-                self.locker.release_lock(file)
-                self.cache.add(path, data)
-                return data
-
-    def write_file(self, data_in):
-        #Seperate out the two components
-        path = data_in[0]
-        data =  data_in[1]
-        if '/' in path:
-            #User entered path in the form ~/DFS-FILES/path
-            if "~/DFS-FILES" in path:
-                full_dir = os.path.expanduser(path)
-            else:
-                #User implied the working dir; append it to the path
-                full_dir = os.getcwd() + '/' + path
-
-            path1, file = os.path.split(full_dir)
-            try:
-                os.chdir(path1)
-            except OSError:
-                #If the dir does not exist - make it
-                print "Directory does not exist; creating..."
-                os.mkdir(path1)
-                os.chdir(path1)
-        else:
-            file = path
-        #Try to acquire the lock
-        if not self.locker.acquire_lock(file):
-            locked = "File is locked, no cached copy available"
-            return locked
-        else:
-            fo = open(file, "w")
-            fo.write(data)
-            fo.close()
-            #Release the lock
-            self.locker.release_lock(file)
-            response = "File {0} has been written\n".format(path)
-            return response
-
-    """========================================================="""
-
 
     """
     =========================================================
@@ -205,15 +159,19 @@ class ThreadPoolMixIn(SocketServer.ThreadingMixIn):
                     r = re.compile("READ FILE (.*?)$")
                     res = r.search(data)
                     path = res.group(1)
-                    response = self.read_file(path)
+                    self.socketToSend.send(data)
+                    response = self.socketToSend.recv(8192)
+                    #response = self.read_file(path)
                     request.sendto(response, client_address)
 
                 if data.startswith("WRITE FILE"):
-                    r = re.compile("WRITE FILE (.*?)$")
-                    res = r.search(data)
-                    s = res.group(1)
-                    data = s.split(" ", 1)
-                    response = self.write_file(data)
+                    #r = re.compile("WRITE FILE (.*?)$")
+                    #res = r.search(data)
+                    #s = res.group(1)
+                    #data = s.split(" ", 1)
+                    self.socketToSend.send(data)
+                    response = self.socketToSend.recv(8192)
+                    #response = self.write_file(data)
                     request.sendto(response, client_address)
 
                 if data.startswith("PWDIR"):
@@ -235,9 +193,13 @@ class ThreadPoolMixIn(SocketServer.ThreadingMixIn):
                     response = self.list_dir(self.current_dir)
                     request.sendto(response, client_address)
 
-                
+
                 if data.startswith("QUIT"):
-                    print "Shutting down..."
+                    for key in self.servers:
+                        sock = self.servers[key]
+                        sock.send(data)
+                        
+                    print "Shutting down Directory Server..."
                     self.shutdown()
 
 

@@ -1,4 +1,6 @@
+import os
 from collections import deque
+from threading import Timer
 
 class Cache:
 
@@ -14,7 +16,8 @@ class Cache:
     keys = deque()
 
     def __init__(self):
-        pass
+        #Refresh the cache every two minutes
+        Timer(120, self.refresh_cache).start()
 
     #Seach for a key in the cache
     def search(self, key):
@@ -48,3 +51,18 @@ class Cache:
         return self.cache[key]
         #else
         #    return -1
+   
+    def refresh_cache(self):
+        if not self.cache:
+            pass
+        else:
+            for key in self.cache:
+               data = self.cache[key]
+               #I should probably lock these operations too.
+               fo = open(key, "r")
+               newData = fo.read()
+               fo.close()
+               if newData == data:
+                   pass
+               else:
+                   self.cache[key] = newData

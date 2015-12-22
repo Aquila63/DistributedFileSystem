@@ -24,6 +24,8 @@ class Client():
 				else:
 					print "Invalid Command\n"
 			s.sendall(self.message)
+			if self.message == "QUIT":
+				sys.exit()
 			try:
 				recv_data = s.recv(4096)
 				print recv_data + '\n'
