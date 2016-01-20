@@ -43,6 +43,8 @@ class Cache:
             purge_entry()
 
         self.cache[key] = value
+        #Add value to the deque
+        self.keys.append(key)
         print "{0} added to the cache".format(key)
 
     #Retrieve an element from the cache
