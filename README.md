@@ -6,7 +6,9 @@ ServerSocket objects back and forward, and it's partly a remenant of a previous 
 the time I was told I was on the right track.
 
 #Description
-This is a simple Distributed File System built for my project in CS4032 Distributed Systems.
+This is a simple Distributed File System built for my project in CS4032 Distributed Systems, implementing a File System (mandatory), Directory Service, File Locking & Caching 
+
+I've tried to document my code as I went along, so look there for details on the implementation itself.
 
 Currently, to run it, you first have to run the two file servers, then the directory server, and finally the simple test client. This is because I've configured the directory server
 to send initialization settings to the two file servers (i.e. what folders each server is handling).
